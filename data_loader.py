@@ -24,9 +24,9 @@ CLASS_NAMES = [
 ]
 NUM_CLASSES = len(CLASS_NAMES)
 
-# EuroSAT images are 64 × 64 × 3
+# EuroSAT 图像尺寸：64×64×3
 IMG_H, IMG_W, IMG_C = 64, 64, 3
-INPUT_DIM = IMG_H * IMG_W * IMG_C   # 12,288
+INPUT_DIM = IMG_H * IMG_W * IMG_C   # 输入维度 = 12288
 
 
 def _load_single(path: str) -> np.ndarray:
@@ -40,7 +40,8 @@ def _load_single(path: str) -> np.ndarray:
 
 def load_dataset(data_dir: str, seed: int = 42):
     """
-    Split ratios: 70 % train · 15 % val · 15 % test
+    读取 EuroSAT_RGB 目录，按 70% / 15% / 15% 分层划分为训练/验证/测试集，
+    并对所有分割做像素级均值-标准差归一化
     """
     rng = np.random.default_rng(seed)
 
@@ -70,7 +71,6 @@ def load_dataset(data_dir: str, seed: int = 42):
         val_idx.extend(  c_idx[n_tr : n_tr + n_val])
         test_idx.extend( c_idx[n_tr + n_val :])
 
-    # shuffle each split
     for idx_list in [train_idx, val_idx, test_idx]:
         rng.shuffle(idx_list)
 
@@ -93,7 +93,7 @@ def load_dataset(data_dir: str, seed: int = 42):
     print("[DataLoader] Loading test images …")
     X_test,  y_test  = _load_split(test_idx)
 
-    # normalize
+    # 均值-标准差归一化
     mean = X_train.mean(axis=0, keepdims=True)        # (1, 12288)
     std  = X_train.std( axis=0, keepdims=True) + 1e-8
 
@@ -103,7 +103,7 @@ def load_dataset(data_dir: str, seed: int = 42):
 
     print("[DataLoader] Normalisation done  (mean/std computed on train set).")
 
-    test_paths = paths[test_idx]   # original image file paths, same order as X_test
+    test_paths = paths[test_idx]   # 测试集图像原始路径，与 X_test 顺序对应
 
     return {
         "X_train": X_train, "y_train": y_train,
@@ -115,7 +115,7 @@ def load_dataset(data_dir: str, seed: int = 42):
 
 
 class DataLoader:
-    """Iterates over (X, y) in random mini-batches."""
+    """对 (X, y) 数据按 mini-batch 随机迭代的简单数据加载器。"""
 
     def __init__(self, X: np.ndarray, y: np.ndarray,
                  batch_size: int = 256, shuffle: bool = True,

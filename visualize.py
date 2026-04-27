@@ -1,18 +1,17 @@
 """
 visualize.py
 ------------
-All visualisation utilities for the EuroSAT MLP project.
+训练结果可视化脚本，包含训练曲线、权重图像和错误样例分析。
 
-Functions
----------
-plot_training_curves   – train/val loss + val accuracy vs. epoch
-plot_weight_images     – first-layer weights reshaped to 64×64×3 images
-plot_error_examples    – misclassified test images with true/predicted labels
+主要函数：
+    plot_training_curves      – 绘制 train/val loss 及 val accuracy 曲线
+    plot_weight_images        – 将第一层权重还原为 64×64×3 图像显示
+    plot_class_weight_images  – 各类别的有效输入权重图（W1@W2@W3[:,c]）
+    plot_error_examples       – 展示测试集中被误分类的图像
 
-Usage (standalone)
-------------------
-    python visualize.py --data_dir EuroSAT_RGB --weights best_model.npz
-                        --history best_model_history.npz
+用法：
+    python visualize.py --data_dir EuroSAT_RGB --weights outputs/best_model.npz
+                        --history outputs/best_model_history.npz
                         [--hidden1 512] [--hidden2 256] [--activation relu]
                         [--n_weight_imgs 20] [--n_error_imgs 12] [--seed 42]
 """
@@ -32,19 +31,17 @@ from data_loader import load_dataset, CLASS_NAMES, INPUT_DIM, NUM_CLASSES, IMG_H
 from model       import MLP
 
 
-# ── 1. Training curves ─────────────────────────────────────────────────────────
+# 1. 训练曲线
 
 def plot_training_curves(history_path: str = "outputs/best_model_history.npz",
                          save_path:    str = "outputs/training_curves.png"):
-    """
-    Plot train loss, val loss, and val accuracy from a saved history .npz.
-    """
+    """从训练历史 .npz 文件读取数据，绘制 loss 和 accuracy 曲线。"""
     h = np.load(history_path)
     epochs = np.arange(1, len(h["train_loss"]) + 1)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
-    # ── Loss curves ────────────────────────────────────────────────────────
+    # 左图：Loss 曲线
     ax = axes[0]
     ax.plot(epochs, h["train_loss"], label="Train Loss",  color="steelblue")
     ax.plot(epochs, h["val_loss"],   label="Val Loss",    color="tomato",  linestyle="--")
@@ -54,7 +51,7 @@ def plot_training_curves(history_path: str = "outputs/best_model_history.npz",
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    # ── Accuracy curve ─────────────────────────────────────────────────────
+    # 右图：Accuracy 曲线
     ax = axes[1]
     ax.plot(epochs, h["val_acc"] * 100, label="Val Accuracy", color="seagreen")
     best_epoch = int(np.argmax(h["val_acc"])) + 1
@@ -73,21 +70,13 @@ def plot_training_curves(history_path: str = "outputs/best_model_history.npz",
     print(f"[Visualize] Training curves saved → {save_path}")
 
 
-# ── 2a. 第一层隐藏神经元权重图（通用特征探测器）─────────────────────────────
+# 2a. 第一层隐藏神经元权重图
 
 def plot_weight_images(model:     MLP,
                        n_images:  int = 20,
                        save_path: str = "outputs/weight_images.png"):
-    """
-    将第一层权重矩阵 W1（形状 12288×hidden1）的每一列还原为 64×64×3 图像显示。
-
-    每张图 = 第一层某个隐藏神经元的"偏好输入模式"：
-      什么像素组合最能激活它（与类别标签无关）。
-
-    按 L2 范数排序（范数越大 = 该神经元权重越强 = 对输入越敏感），
-    取前 n_images 个展示。n_images 默认 20，与 10 个类别无关。
-    """
-    W1 = model.W1.T    # (hidden1, 12288)，每行是一个神经元的权重向量
+    """将 W1 的每列（一个隐藏神经元的权重）还原为 64×64×3 图像，按 L2 范数从大到小取前 n_images 个展示。"""
+    W1 = model.W1.T    # (hidden1, 12288)，每行对应一个神经元
 
     norms = np.linalg.norm(W1, axis=1)
     order = np.argsort(norms)[::-1]
@@ -125,27 +114,15 @@ def plot_weight_images(model:     MLP,
     print(f"[Visualize] Weight images saved → {save_path}")
 
 
-# ── 2b. 10类专属"有效权重图"（端到端：输入→各类别）────────────────────────
+# 2b. 各类别有效权重图（W1 @ W2 @ W3[:, c]）
 
 def plot_class_weight_images(model:     MLP,
                              save_path: str = "outputs/class_weight_images.png"):
     """
-    计算从输入层到每个输出类别的"有效权重"，生成 10 张类别专属图像。
-
-    数学原理（线性近似，忽略 ReLU）：
-      effective_weight_c = W1 @ W2 @ W3[:, c]
-      形状：(12288, 512) @ (512, 256) @ (256,) = (12288,)
-
-    这个向量回答的是：
-      "如果不考虑非线性激活，网络认为第 c 类的'理想输入'长什么样？"
-
-    正值（暖色）→ 该像素位置出现此颜色时，网络倾向于判断为这一类；
-    负值（冷色）→ 该像素出现此颜色时，网络倾向于排除这一类。
-
-    注意：这是三层线性权重的折叠，ReLU 的非线性被忽略，
-    因此图像是一种近似解释而非精确因果。
+    计算有效权重 effective[:, c] = W1 @ W2 @ W3[:, c]，还原为图像展示每类的"偏好输入"。
+    正值（暖色）→ 该像素倾向激活该类，负值（冷色）→ 倾向抑制该类。
+    忽略了 ReLU 非线性，是线性近似。
     """
-    # W1: (12288, h1)  W2: (h1, h2)  W3: (h2, 10)
     # effective: (12288, 10)，每列对应一个类别
     effective = model.W1 @ model.W2 @ model.W3   # (12288, 10)
 
@@ -177,7 +154,7 @@ def plot_class_weight_images(model:     MLP,
     print(f"[Visualize] Class weight images saved → {save_path}")
 
 
-# ── 3. Error analysis ──────────────────────────────────────────────────────────
+# 3. 错误样例分析
 
 def plot_error_examples(model:      MLP,
                         data:       dict,
@@ -185,17 +162,14 @@ def plot_error_examples(model:      MLP,
                         save_path:  str   = "outputs/error_examples.png",
                         batch_size: int   = 512):
     """
-    Find misclassified test images and display them with true / predicted labels.
-
-    Images are loaded directly from the original files (stored in data["test_paths"]),
-    completely bypassing denormalization – guarantees correct colors regardless of
-    how the normalization was configured.
+    在测试集中找出被误分类的图像，展示真实标签和预测标签。
+    图像直接从原始文件加载（data["test_paths"]），不经过反归一化，保证颜色正确。
     """
     X_test     = data["X_test"]
     y_test     = data["y_test"]
-    test_paths = data.get("test_paths", None)   # may be absent in old datasets
+    test_paths = data.get("test_paths", None)
 
-    # ── run inference ──────────────────────────────────────────────────────
+    # 推理
     all_preds = []
     for start in range(0, len(X_test), batch_size):
         Xb    = X_test[start : start + batch_size]
@@ -203,7 +177,7 @@ def plot_error_examples(model:      MLP,
         all_preds.extend(preds.tolist())
     y_pred = np.array(all_preds)
 
-    # ── find misclassified indices ─────────────────────────────────────────
+    # 找出分类错误的样本下标
     wrong_idx = np.where(y_pred != y_test)[0]
     print(f"[Visualize] Total misclassified: {len(wrong_idx)}/{len(y_test)} "
           f"({len(wrong_idx)/len(y_test)*100:.1f}%)")
@@ -212,7 +186,7 @@ def plot_error_examples(model:      MLP,
         print("[Visualize] No errors found – perfect classifier!")
         return
 
-    # ── select diverse examples (one per unique true→predicted pair) ───────
+    # 尽量选取不同 true→pred 组合的样本，提高多样性
     rng         = np.random.default_rng(42)
     chosen      = []
     shown_pairs = set()
@@ -223,7 +197,7 @@ def plot_error_examples(model:      MLP,
             shown_pairs.add(pair)
         if len(chosen) >= n_images:
             break
-    # Fill remaining slots randomly if not enough diverse pairs
+    # 如果不够就随机补充
     if len(chosen) < n_images:
         chosen_set = set(chosen)
         remaining  = [int(i) for i in wrong_idx if int(i) not in chosen_set]
@@ -234,9 +208,9 @@ def plot_error_examples(model:      MLP,
             chosen.extend(extra.tolist())
     chosen = chosen[:n_images]
 
-    # ── load images from disk (best quality) or fall back to denormalise ───
+
     def _load_image(data_idx: int) -> np.ndarray:
-        """Return a float32 (H, W, 3) array in [0, 1]."""
+        """返回 float32 格式的 (H, W, 3) 图像，值域 [0, 1]。"""
         if test_paths is not None:
             path = str(test_paths[data_idx])
             img  = Image.open(path).convert("RGB")
@@ -244,20 +218,17 @@ def plot_error_examples(model:      MLP,
                 img = img.resize((IMG_W, IMG_H), Image.BILINEAR)
             return np.asarray(img, dtype=np.float32) / 255.0
         else:
-            # Fallback: per-image min-max normalisation for display
-            # (avoids the per-pixel-std artefacts of full denormalisation)
-            raw = X_test[data_idx]                         # normalised vector
+            # fallback
+            raw = X_test[data_idx]                         # 已归一化的向量
             img = raw.reshape(IMG_H, IMG_W, IMG_C).copy()
             lo, hi = img.min(), img.max()
             img = (img - lo) / (hi - lo + 1e-8)
             return np.clip(img, 0.0, 1.0)
 
-    # ── build figure ───────────────────────────────────────────────────────
     n_cols = min(4, n_images)
     n_rows = (n_images + n_cols - 1) // n_cols
     fig, axes = plt.subplots(n_rows, n_cols,
                              figsize=(n_cols * 3.5, n_rows * 4.0))
-    # Ensure axes is always a 2-D array
     axes = np.array(axes).reshape(n_rows, n_cols)
 
     for plot_i, data_i in enumerate(chosen):
@@ -266,7 +237,7 @@ def plot_error_examples(model:      MLP,
         true_name = CLASS_NAMES[y_test[data_i]]
         pred_name = CLASS_NAMES[y_pred[data_i]]
 
-        # Softmax probabilities for the top-2 classes
+        # 取 top-2 类别的概率显示
         probs     = model.forward(X_test[data_i : data_i + 1])[0]
         top2_idx  = np.argsort(probs)[::-1][:2]
         prob_str  = "  ".join(f"{CLASS_NAMES[j][:6]}:{probs[j]*100:.0f}%"
@@ -281,7 +252,7 @@ def plot_error_examples(model:      MLP,
         )
         ax.axis("off")
 
-    # Hide unused subplot slots
+    # 隐藏多余的子图格
     for k in range(len(chosen), n_rows * n_cols):
         axes[k // n_cols, k % n_cols].axis("off")
 
@@ -295,11 +266,11 @@ def plot_error_examples(model:      MLP,
     print(f"[Visualize] Error examples saved → {save_path}")
 
 
-# ── 4. Hyperparameter search results ──────────────────────────────────────────
+# 4. 超参数搜索结果
 
 def plot_search_results(csv_path:  str = "outputs/search_results.csv",
                         save_path: str = "outputs/search_results.png"):
-    """Bar chart of val_acc for all hyperparameter trials."""
+    """读取超参数搜索结果 CSV，生成各 trial 验证集准确率的柱状图。"""
     try:
         import csv
         rows = []
@@ -332,10 +303,8 @@ def plot_search_results(csv_path:  str = "outputs/search_results.csv",
         print(f"[Visualize] Could not plot search results: {e}")
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────────
-
 def parse_args():
-    p = argparse.ArgumentParser(description="Visualise EuroSAT MLP results")
+    p = argparse.ArgumentParser(description="EuroSAT MLP 结果可视化")
     p.add_argument("--data_dir",      default="EuroSAT_RGB")
     p.add_argument("--weights",       default="outputs/best_model.npz")
     p.add_argument("--history",       default="outputs/best_model_history.npz")
@@ -353,19 +322,18 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    # ── ensure output directory exists ────────────────────────────────────
     os.makedirs(args.output_dir, exist_ok=True)
 
     def out(fname):
         return os.path.join(args.output_dir, fname)
 
-    # ── training curves ────────────────────────────────────────────────────
+    # 训练曲线
     if os.path.exists(args.history):
         plot_training_curves(args.history, save_path=out("training_curves.png"))
     else:
         print(f"[Visualize] History file not found: {args.history}")
 
-    # ── weight images ──────────────────────────────────────────────────────
+    # 权重图像
     model = MLP(input_dim=INPUT_DIM,
                 hidden1=args.hidden1,
                 hidden2=args.hidden2,
@@ -382,13 +350,13 @@ if __name__ == "__main__":
         print(f"[Visualize] Weights file not found: {args.weights}")
         print("            Skipping weight images & error examples.")
 
-    # ── error analysis ─────────────────────────────────────────────────────
+    # 错误样例分析
     if os.path.exists(args.weights):
         data = load_dataset(args.data_dir, seed=args.seed)
         plot_error_examples(model, data, n_images=args.n_error_imgs,
                             save_path=out("error_examples.png"))
 
-    # ── search results ─────────────────────────────────────────────────────
+    # 超参数搜索结果
     csv_path = out("search_results.csv")
     if os.path.exists(csv_path):
         plot_search_results(csv_path=csv_path,

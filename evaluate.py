@@ -1,18 +1,10 @@
 """
 evaluate.py
 -----------
-Load the best saved model weights and evaluate on the test set.
+加载训练好的模型权重，在测试集上评估分类准确率，并生成混淆矩阵。
 
-Outputs
--------
-  - Overall classification accuracy
-  - Per-class accuracy
-  - 10 × 10 confusion matrix (printed + saved as confusion_matrix.npy)
-  - Confusion matrix plot  (confusion_matrix.png)
-
-Usage
------
-    python evaluate.py [--data_dir EuroSAT_RGB] [--weights best_model.npz]
+用法：
+    python evaluate.py [--data_dir EuroSAT_RGB] [--weights outputs/best_model.npz]
                        [--hidden1 512] [--hidden2 256] [--activation relu]
                        [--batch_size 512] [--seed 42]
 """
@@ -28,7 +20,7 @@ from model       import MLP
 def confusion_matrix(y_true: np.ndarray,
                      y_pred: np.ndarray,
                      num_classes: int = NUM_CLASSES) -> np.ndarray:
-    """Return (num_classes × num_classes) confusion matrix."""
+    """返回 num_classes × num_classes 的混淆矩阵。"""
     cm = np.zeros((num_classes, num_classes), dtype=np.int64)
     for t, p in zip(y_true, y_pred):
         cm[t, p] += 1
@@ -62,7 +54,7 @@ def plot_confusion_matrix(cm: np.ndarray,
         ax.set_yticks(tick_marks)
         ax.set_yticklabels(class_names, fontsize=9)
 
-        # Annotate cells
+        # 在格子内标注数值
         thresh = cm.max() / 2.0
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
@@ -126,7 +118,7 @@ def evaluate(data_dir:   str   = "EuroSAT_RGB",
     print("\nConfusion Matrix (rows=true, cols=predicted):")
     print_confusion_matrix(cm)
 
-    # Save
+    # 保存混淆矩阵
     npy_path = os.path.join(output_dir, "confusion_matrix.npy")
     png_path = os.path.join(output_dir, "confusion_matrix.png")
     np.save(npy_path, cm)
@@ -137,7 +129,7 @@ def evaluate(data_dir:   str   = "EuroSAT_RGB",
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Evaluate EuroSAT MLP classifier")
+    p = argparse.ArgumentParser(description="EuroSAT MLP 测试集评估")
     p.add_argument("--data_dir",    default="EuroSAT_RGB")
     p.add_argument("--weights",     default="outputs/best_model.npz")
     p.add_argument("--hidden1",     type=int, default=512)

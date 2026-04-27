@@ -1,12 +1,12 @@
 """
 model.py
 --------
-Three-layer MLP classifier implemented with NumPy.
+基于 NumPy 手动实现的三层 MLP 分类器。
 
-Architecture:
-    Input (12 288) → Linear → Activation → Linear → Activation → Linear → Softmax (10)
+网络结构：
+    输入层 (12288) → 全连接+激活 → 隐藏层1 → 全连接+激活 → 隐藏层2 → 全连接 → Softmax (10类)
 
-All gradients are computed by hand (no autograd framework).
+所有梯度均手动推导，不依赖任何自动微分框架。
 """
 
 import numpy as np
@@ -42,7 +42,7 @@ ACTIVATIONS = {
 
 
 def softmax(z: np.ndarray) -> np.ndarray:
-    """Row-wise numerically stable softmax."""
+    """按行计算数值稳定的 softmax。"""
     z_shifted = z - z.max(axis=1, keepdims=True)
     exp_z     = np.exp(z_shifted)
     return exp_z / exp_z.sum(axis=1, keepdims=True)
@@ -50,19 +50,18 @@ def softmax(z: np.ndarray) -> np.ndarray:
 
 class MLP:
     """
-    Three-layer MLP:
-        Layer 1: Linear(input_dim  → hidden1)  + activation
-        Layer 2: Linear(hidden1    → hidden2)  + activation
-        Layer 3: Linear(hidden2    → num_classes) + softmax 
+    三层多层感知机（MLP）：
+        第1层：Linear(input_dim → hidden1) + 激活函数
+        第2层：Linear(hidden1  → hidden2)  + 激活函数
+        第3层：Linear(hidden2  → num_classes) + Softmax
 
-    Parameters
-    ----------
-    input_dim   : int   – dimension of the flattened input (12 288 for EuroSAT)
-    hidden1     : int   – size of the first hidden layer  (default 512)
-    hidden2     : int   – size of the second hidden layer (default 256)
-    num_classes : int   – number of output classes        (default 10)
-    activation  : str   – 'relu' | 'sigmoid' | 'tanh'    (default 'relu')
-    seed        : int   – random seed for weight initialisation
+    参数说明：
+        input_dim   : 输入维度（EuroSAT 为 12288）
+        hidden1     : 第一隐藏层神经元数（默认 512）
+        hidden2     : 第二隐藏层神经元数（默认 256）
+        num_classes : 输出类别数（默认 10）
+        activation  : 激活函数，支持 'relu' / 'sigmoid' / 'tanh'
+        seed        : 权重初始化随机种子
     """
 
     def __init__(self,
@@ -89,7 +88,7 @@ class MLP:
 
         self._cache: dict = {}
 
-    # Weight initialisation (Xavier / Glorot) 
+    # 权重初始化（Xavier / Glorot 均匀分布）
     def _init_weights(self, rng: np.random.Generator):
         def xavier(fan_in, fan_out):
             limit = np.sqrt(6.0 / (fan_in + fan_out))
@@ -106,18 +105,18 @@ class MLP:
 
 
     def forward(self, X: np.ndarray) -> np.ndarray:
-        # Layer 1
+        # 第1层
         Z1 = X @ self.W1 + self.b1           # (N, hidden1)
         A1 = self._act_fn(Z1)                # (N, hidden1)
 
-        # Layer 2
+        # 第2层
         Z2 = A1 @ self.W2 + self.b2          # (N, hidden2)
         A2 = self._act_fn(Z2)                # (N, hidden2)
 
-        # Output layer
+        # 输出层
         Z3 = A2 @ self.W3 + self.b3          # (N, num_classes)
 
-        # Save for backward pass
+        # 保存中间值，供反向传播使用
         self._cache = {"X": X, "Z1": Z1, "A1": A1, "Z2": Z2, "A2": A2, "Z3": Z3}
 
         return softmax(Z3)                   # (N, num_classes)
@@ -133,8 +132,7 @@ class MLP:
         A2 = self._cache["A2"]
         N  = X.shape[0]
 
-        # output layer gradient
-        # d(CE) / dZ3 = probs - one_hot(y)
+        # 输出层梯度：d(CE)/dZ3 = probs - one_hot(y)
         one_hot  = np.zeros_like(probs)
         one_hot[np.arange(N), y] = 1.0
         dZ3 = (probs - one_hot) / N              # (N, num_classes)
@@ -143,18 +141,18 @@ class MLP:
         db3 = dZ3.sum(axis=0, keepdims=True)     # (1, num_classes)
         dA2 = dZ3 @ self.W3.T                    # (N, hidden2)
 
-        # layer 2 gradient 
+        # 第2层梯度
         dZ2 = dA2 * self._act_grad(Z2)           # (N, hidden2)
         dW2 = A1.T @ dZ2                         # (hidden1, hidden2)
         db2 = dZ2.sum(axis=0, keepdims=True)     # (1, hidden2)
         dA1 = dZ2 @ self.W2.T                    # (N, hidden1)
 
-        # layer 1 gradient
+        # 第1层梯度
         dZ1 = dA1 * self._act_grad(Z1)           # (N, hidden1)
         dW1 = X.T @ dZ1                          # (input_dim, hidden1)
         db1 = dZ1.sum(axis=0, keepdims=True)     # (1, hidden1)
 
-        # L2 regularisation
+        # L2 正则化梯度
         if weight_decay > 0.0:
             dW1 += weight_decay * self.W1
             dW2 += weight_decay * self.W2
@@ -171,7 +169,7 @@ class MLP:
 
 
     def save_weights(self, path: str):
-        """Save all parameters to a .npz file."""
+        """将所有参数保存为 .npz 文件。"""
         np.savez(path,
                  W1=self.W1, b1=self.b1,
                  W2=self.W2, b2=self.b2,
@@ -179,7 +177,7 @@ class MLP:
         print(f"[MLP] Weights saved → {path}")
 
     def load_weights(self, path: str):
-        """Load parameters from a .npz file."""
+        """从 .npz 文件中加载参数。"""
         data = np.load(path)
         self.W1 = data["W1"]
         self.b1 = data["b1"]

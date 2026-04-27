@@ -1,20 +1,15 @@
 """
 train.py
 --------
-Training loop for the EuroSAT MLP classifier.
+EuroSAT MLP 分类器的训练主循环。
+验证集准确率最高时自动保存模型权重，训练结束后保存 loss/acc 历史。
 
-Usage
------
+用法：
     python train.py [--data_dir EuroSAT_RGB] [--epochs 50] [--batch_size 256]
                     [--lr 1e-3] [--hidden1 512] [--hidden2 256]
                     [--weight_decay 1e-4] [--lr_decay 0.95]
-                    [--activation relu] [--save_path best_model.npz]
+                    [--activation relu] [--save_path outputs/best_model.npz]
                     [--seed 42]
-
-Outputs
--------
-  best_model.npz      – weights of the epoch with highest val accuracy
-  train_history.npz   – loss/accuracy arrays for plotting
 """
 
 import argparse
@@ -47,7 +42,7 @@ def compute_loss(model: MLP, X: np.ndarray, y: np.ndarray,
         Xb    = X[start : start + batch_size]
         yb    = y[start : start + batch_size]
         probs = model.forward(Xb)
-        # No L2 penalty here to keep val/test loss unaffected
+        # 验证/测试损失不加 L2 惩罚，保持可比性
         total_loss += cross_entropy_loss(probs, yb) * len(yb)
     return total_loss / n
 
@@ -162,7 +157,7 @@ def train(data_dir:     str   = "EuroSAT_RGB",
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Train EuroSAT MLP classifier")
+    p = argparse.ArgumentParser(description="EuroSAT MLP 训练脚本")
     p.add_argument("--data_dir",     default="EuroSAT_RGB")
     p.add_argument("--epochs",       type=int,   default=50)
     p.add_argument("--batch_size",   type=int,   default=256)

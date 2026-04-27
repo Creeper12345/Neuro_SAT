@@ -1,22 +1,10 @@
 """
 pack_outputs.py
 ---------------
-将实验生成的可视化文件和结果文件打包为 zip 压缩包。
+将 outputs/ 目录下的实验结果文件打包为 zip 压缩包，便于提交。
 
-Usage
------
+用法：
     python pack_outputs.py [--output_dir outputs] [--zip_name hw1_outputs.zip]
-
-默认收集以下文件（存在则打包，不存在则跳过）：
-  - training_curves.png       训练/验证集 Loss 曲线 + 验证集 Accuracy 曲线
-  - weight_images.png         第一层权重可视化
-  - error_examples.png        错误分类样例分析
-  - confusion_matrix.png      混淆矩阵热力图
-  - confusion_matrix.npy      混淆矩阵原始数据
-  - search_results.png        超参数搜索结果图
-  - search_results.csv        超参数搜索详细记录
-  - best_model_*.npz          训练好的最优模型权重
-  - *_history.npz             训练历史（loss/acc 曲线数据）
 """
 
 import argparse
@@ -76,7 +64,6 @@ def collect_files(output_dir: str) -> list:
 
 
 def pack(output_dir: str = "outputs", zip_name: str = None):
-    """打包 output_dir 下的可视化文件为 zip。"""
 
     if not os.path.isdir(output_dir):
         print(f"[Pack] 错误：目录不存在 → {output_dir}")

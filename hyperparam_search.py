@@ -1,22 +1,12 @@
 """
 hyperparam_search.py
 --------------------
-Hyperparameter search for the EuroSAT MLP classifier.
+EuroSAT MLP 超参数搜索脚本，支持网格搜索（grid）和随机搜索（random）两种模式。
 
-Supports two modes:
-  --mode grid    – exhaustive grid search over all combinations
-  --mode random  – random search over a fixed number of trials
+搜索的超参数：学习率、隐藏层大小、L2 正则化系数、激活函数。
+结果保存至 outputs/search_results.csv。
 
-Searched hyperparameters:
-  - learning rate         (lr)
-  - hidden layer sizes    (hidden1 × hidden2)
-  - L2 regularisation     (weight_decay)
-  - activation function   (activation)
-
-Results are logged to  search_results.csv  (sortable by val_acc).
-
-Usage
------
+用法：
     python hyperparam_search.py --data_dir EuroSAT_RGB --mode grid --epochs 20
     python hyperparam_search.py --data_dir EuroSAT_RGB --mode random --n_trials 20 --epochs 20
 """
@@ -35,7 +25,7 @@ from optimizer   import SGD, cross_entropy_loss
 from train       import compute_accuracy, compute_loss
 
 
-# Search space
+# 网格搜索空间
 
 GRID = {
     "lr":           [1e-2, 1e-3, 5e-4],
@@ -45,7 +35,7 @@ GRID = {
     "activation":   ["relu", "tanh", "sigmoid"],
 }
 
-# Random search ranges
+# 随机搜索范围
 RANDOM_RANGES = {
     "lr":           (1e-4, 5e-2),   
     "hidden1":      [256, 512, 1024],
@@ -179,7 +169,7 @@ def search(data_dir:   str   = "EuroSAT_RGB",
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Hyperparameter search for EuroSAT MLP")
+    p = argparse.ArgumentParser(description="EuroSAT MLP 超参数搜索")
     p.add_argument("--data_dir",   default="EuroSAT_RGB")
     p.add_argument("--mode",       default="grid",
                    choices=["grid", "random"])

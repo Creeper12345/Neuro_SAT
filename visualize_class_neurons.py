@@ -1,24 +1,17 @@
 """
 visualize_class_neurons.py
-──────────────────────────
-为每个类别找出对其贡献最大的隐藏神经元，并可视化它们的输入权重模式。
+--------------------------
+针对每个类别找出贡献最大的隐藏神经元，可视化其输入权重模式及通道偏好。
 
-四种可视化（按可解释性排序）：
-  ① class_mean_images.png      每类正确预测图像的像素均值（最直观）
-  ② class_key_neurons.png      激活×贡献系数双重加权的关键 H1 神经元权重
-  ③ class_weight_neurons.png   纯权重贡献系数排序（正/负对比）
-  ④ class_channels.png         有效权重 W1@W2@W3[:,c] 按 RGB 通道分解
+生成四种可视化图：
+  1 class_mean_images.png      每类正确预测图像的像素均值
+  2 class_key_neurons.png      激活×贡献系数双重加权的关键 H1 神经元权重
+  3 class_weight_neurons.png   纯权重贡献系数排序（正/负对比）
+  4 class_channels.png         有效权重 W1@W2@W3[:,c] 按 RGB 通道分解
 
-Usage
-─────
-    # 本地 Mac（有 EuroSAT_RGB 数据）
-    python visualize_class_neurons.py \\
-        --data_dir "/Users/daishangzhe/研究生课程/深度学习与空间智能/hw1/EuroSAT_RGB" \\
-        --weights  outputs/best_model_1.npz \\
-        --hidden1 256 --hidden2 256 --activation relu
-
-    # 服务器
-    python visualize_class_neurons.py --data_dir EuroSAT_RGB --weights outputs/best_model_1.npz
+用法：
+    python visualize_class_neurons.py --data_dir EuroSAT_RGB \\
+        --weights outputs/best_model.npz --hidden1 256 --hidden2 256 --activation relu
 """
 
 import argparse
@@ -40,7 +33,6 @@ from model       import MLP
 
 IMG_SHAPE = (IMG_H, IMG_W, IMG_C)   # (64, 64, 3)
 
-# ── 中英文类别名对照 ───────────────────────────────────────────────────────────
 CLASS_ZH = {
     "AnnualCrop":            "年作物 AnnualCrop",
     "Forest":                "森林 Forest",
@@ -54,8 +46,6 @@ CLASS_ZH = {
     "SeaLake":               "海湖 SeaLake",
 }
 
-
-# ── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def weight_to_img(w: np.ndarray, signed: bool = True) -> np.ndarray:
     """12288维权重向量 → [0,1] 的 64×64×3 图像。
@@ -71,7 +61,6 @@ def weight_to_img(w: np.ndarray, signed: bool = True) -> np.ndarray:
 
 
 def add_row_label(ax, text, fontsize=8):
-    """在坐标轴左侧添加行标签"""
     ax.annotate(
         text,
         xy=(0, 0.5), xycoords="axes fraction",
@@ -95,7 +84,7 @@ def add_colorbar_legend(fig, ax_ref, label_pos="bottom"):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ① 类别均值图像（最直观）
+# 1 类别均值图像
 # ══════════════════════════════════════════════════════════════════════════════
 
 def plot_class_mean_images(model: MLP, data: dict,
@@ -106,7 +95,7 @@ def plot_class_mean_images(model: MLP, data: dict,
     y_pred       = model.predict(X_test)
     correct_mask = (y_pred == y_test)
 
-    # 每类 2 列：均值图 + 3张随机正例小图（4列总）
+    # 每类 2 列：均值图 + 3张随机正例小图
     SAMPLE_COLS = 3
     N_COLS = 1 + SAMPLE_COLS
     fig, axes = plt.subplots(NUM_CLASSES, N_COLS,
@@ -138,7 +127,6 @@ def plot_class_mean_images(model: MLP, data: dict,
         ax0.set_title(f"Avg (acc={acc_c:.0f}%)", fontsize=7.5, pad=2)
         ax0.axis("off")
 
-        # 添加行标签（类别名）
         label = CLASS_ZH.get(cname, cname)
         add_row_label(ax0, label, fontsize=8)
 
@@ -166,18 +154,18 @@ def plot_class_mean_images(model: MLP, data: dict,
         axes[0, col + 1].set_title(f"正确预测样例 {col+1}", fontsize=8, pad=3)
 
     fig.suptitle(
-        "① 类别视觉原型 — 正确预测测试图像的像素均值 & 随机样例\n"
+        "1 类别视觉原型 — 正确预测测试图像的像素均值 & 随机样例\n"
         "Class Prototype: Mean of Correctly-Classified Test Samples",
         fontsize=11, y=1.005, fontweight="bold",
     )
     plt.tight_layout(rect=[0.09, 0, 1, 1])
     plt.savefig(save_path, dpi=180, bbox_inches="tight")
     plt.close()
-    print(f"[①] class mean images → {save_path}")
+    print(f"[1] class mean images → {save_path}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ② 激活 × 贡献系数双重加权
+# 2 激活 × 贡献系数双重加权
 # ══════════════════════════════════════════════════════════════════════════════
 
 def plot_activation_weighted_neurons(model: MLP, data: dict,
@@ -186,7 +174,7 @@ def plot_activation_weighted_neurons(model: MLP, data: dict,
     X_test, y_test = data["X_test"], data["y_test"]
 
     # 前向传播收集 H1 激活
-    print("[②] Collecting H1 activations …")
+    print("[2] Collecting H1 activations …")
     h1_acts = np.zeros((len(X_test), model.hidden1), dtype=np.float32)
     for s in range(0, len(X_test), 512):
         model.forward(X_test[s:s+512])
@@ -210,7 +198,7 @@ def plot_activation_weighted_neurons(model: MLP, data: dict,
         coeff_c  = coeff_h1[:, c]
         acc_c    = (model.predict(X_test)[mask] == y_test[mask]).mean() * 100
 
-        # 正贡献 top-k：score = mean_activation × coeff（仅正）
+        # 正贡献 top-k：score = mean_activation × coeff
         pos_score = np.where(coeff_c > 0, mean_act * coeff_c, 0.0)
         pos_top   = np.argsort(pos_score)[::-1][:top_k]
         # 负贡献 top-k：|score| 最大的负向神经元
@@ -268,18 +256,18 @@ def plot_activation_weighted_neurons(model: MLP, data: dict,
                bbox_to_anchor=(0.5, -0.03))
 
     fig.suptitle(
-        "② 激活×贡献系数双重加权关键 H1 神经元权重可视化\n"
+        "2 激活×贡献系数双重加权关键 H1 神经元权重可视化\n"
         "score = mean_activation[k] × coeff[k,c]   |   coeff = (W2 @ W3[:,c])[k]",
         fontsize=10, y=1.002, fontweight="bold",
     )
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(save_path, dpi=180, bbox_inches="tight")
     plt.close()
-    print(f"[②] activation-weighted neuron vis → {save_path}")
+    print(f"[2] activation-weighted neuron vis → {save_path}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ③ 纯权重贡献（正/负对比，不依赖数据）
+# 3 纯权重贡献（正/负对比，不依赖数据）
 # ══════════════════════════════════════════════════════════════════════════════
 
 def plot_weight_only_neurons(model: MLP,
@@ -348,18 +336,18 @@ def plot_weight_only_neurons(model: MLP,
                bbox_to_anchor=(0.5, -0.04))
 
     fig.suptitle(
-        "③ 纯权重贡献系数关键 H1 神经元（不依赖数据）\n"
+        "3 纯权重贡献系数关键 H1 神经元（不依赖数据）\n"
         "coeff[k, c] = (W2 @ W3[:, c])[k]   —   该神经元对类别 c 的线性贡献强度",
         fontsize=10, y=1.002, fontweight="bold",
     )
     plt.tight_layout(rect=[0, 0.07, 1, 1])
     plt.savefig(save_path, dpi=180, bbox_inches="tight")
     plt.close()
-    print(f"[③] weight-only neuron vis → {save_path}")
+    print(f"[3] weight-only neuron vis → {save_path}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ④ 有效权重分 RGB 通道（颜色偏好分析）
+# 4 有效权重分 RGB 通道（颜色偏好分析）
 # ══════════════════════════════════════════════════════════════════════════════
 
 def plot_class_effective_channels(model: MLP,
@@ -438,7 +426,7 @@ def plot_class_effective_channels(model: MLP,
                bbox_to_anchor=(0.5, -0.02))
 
     fig.suptitle(
-        "④ 类别有效权重分 RGB 通道解析    effective[c] = W1 @ W2 @ W3[:, c]\n"
+        "4 类别有效权重分 RGB 通道解析    effective[c] = W1 @ W2 @ W3[:, c]\n"
         "正值(暖色) = 该颜色像素激活该类，负值(冷色) = 该颜色像素抑制该类\n"
         "柱状图摘要可直观判断每类对 RGB 三通道的偏好方向",
         fontsize=10, y=1.002, fontweight="bold",
@@ -446,13 +434,13 @@ def plot_class_effective_channels(model: MLP,
     plt.tight_layout(rect=[0.08, 0.04, 1, 1])
     plt.savefig(save_path, dpi=180, bbox_inches="tight")
     plt.close()
-    print(f"[④] class channel analysis → {save_path}")
+    print(f"[4] class channel analysis → {save_path}")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Class-specific neuron visualization")
+    p = argparse.ArgumentParser(description="类别神经元可视化")
     p.add_argument("--data_dir",   default="EuroSAT_RGB")
     p.add_argument("--weights",    default="outputs/best_model_1.npz")
     p.add_argument("--hidden1",    type=int,   default=256)
@@ -481,19 +469,19 @@ if __name__ == "__main__":
     data = load_dataset(args.data_dir, seed=args.seed)
     print()
 
-    # ① 类别均值图像
+    # 1 类别均值图像
     plot_class_mean_images(model, data, save_path=out("class_mean_images.png"))
 
-    # ② 激活×贡献双重加权
+    # 2 激活×贡献双重加权
     plot_activation_weighted_neurons(model, data,
                                      top_k=args.top_k,
                                      save_path=out("class_key_neurons.png"))
 
-    # ③ 纯权重贡献
+    # 3 纯权重贡献
     plot_weight_only_neurons(model, top_k=args.top_k,
                              save_path=out("class_weight_neurons.png"))
 
-    # ④ 有效权重分通道
+    # 4 有效权重分通道
     plot_class_effective_channels(model, save_path=out("class_channels.png"))
 
     print("\n[ClassNeuron] All done. Files saved to:", args.output_dir)

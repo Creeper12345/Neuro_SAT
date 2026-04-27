@@ -1,40 +1,34 @@
 """
 optimizer.py
 ------------
-SGD optimiser with learning-rate decay + cross-entropy loss with L2 regularisation.
+SGD 优化器（支持动量和学习率衰减）及交叉熵损失函数。
 
-Classes
--------
-SGD            – vanilla SGD (+ optional momentum) with step-based LR decay
-CrossEntropyLoss – computes loss value (backward pass lives in model.py)
+包含：
+    cross_entropy_loss  – 计算交叉熵损失（可选 L2 正则化项）
+    SGD                 – 带动量的 SGD，支持每 epoch 学习率衰减
 """
 
 import numpy as np
 from model import MLP, softmax
 
 
-# cross-entropy loss
+# 交叉熵损失
 
 def cross_entropy_loss(probs: np.ndarray,
                        y:     np.ndarray,
                        model: MLP = None,
                        weight_decay: float = 0.0) -> float:
     """
-    Compute mean cross-entropy loss  + optional L2 regularisation term.
+    计算交叉熵损失。
 
-    Parameters
-    ----------
-    probs        : (N, C)  softmax probabilities (output of model.forward)
-    y            : (N,)    integer ground-truth labels
-    model        : MLP     – if provided, add L2 penalty on W1, W2, W3
-    weight_decay : float   – λ for L2 penalty  (0 = disabled)
-
-    Returns
-    -------
-    loss : float
+    参数：
+        probs        : (N, C)  模型输出的 softmax 概率
+        y            : (N,)    真实类别标签（整数）
+        model        : MLP     若提供，则在损失中加入 W1/W2/W3 的 L2 惩罚
+        weight_decay : float   L2 系数 λ（0 表示不正则化）
     """
     N = len(y)
-    # Clamp to avoid log(0)
+    # 截断防止 log(0)
     log_probs = np.log(np.clip(probs[np.arange(N), y], 1e-12, 1.0))
     ce_loss   = -log_probs.mean()
 
@@ -47,20 +41,18 @@ def cross_entropy_loss(probs: np.ndarray,
     return float(ce_loss)
 
 
-# SGD optimiser
+# SGD 优化器
 class SGD:
     """
-    Stochastic Gradient Descent with optional momentum and step-based LR decay.
+    带动量的随机梯度下降（SGD）。
 
-    Parameters
-    ----------
-    model        : MLP    – the model whose parameters will be updated
-    lr           : float  – initial learning rate
-    momentum     : float  – momentum coefficient (0 = vanilla SGD)
-    weight_decay : float  – L2 regularisation coefficient λ
-    lr_decay     : float  – multiplicative LR decay factor applied each epoch
-                            e.g. 0.95 reduces LR by 5 % every epoch
-    lr_min       : float  – floor on the learning rate
+    参数：
+        model        : MLP    要更新参数的模型
+        lr           : float  初始学习率
+        momentum     : float  动量系数（0 = 无动量的普通 SGD）
+        weight_decay : float  L2 正则化系数 λ
+        lr_decay     : float  每 epoch 学习率乘法衰减因子（如 0.95 = 每轮降 5%）
+        lr_min       : float  学习率下限，防止衰减过小
     """
 
     def __init__(self,
@@ -102,7 +94,7 @@ class SGD:
             g = grads[grad_name]
             v = self._velocity[param_name]
 
-            # Momentum update: v ← μv + (1-μ)g  
+            # 动量更新：v ← μv + (1-μ)g
             self._velocity[param_name] = mu * v + (1.0 - mu) * g
 
             param = getattr(self.model, param_name)
@@ -112,12 +104,11 @@ class SGD:
         self._step += 1
 
     def zero_grad(self):
-        """No-op: gradients are recomputed fresh each backward call."""
+        """占位方法：本实现中梯度每次反向传播时重新计算，无需清零。"""
         pass
 
-    # ── epoch-level LR decay ───────────────────────────────────────────────
     def decay_lr(self):
-        """Call once per epoch to apply multiplicative LR decay."""
+        """每个 epoch 结束时调用，对学习率做乘法衰减。"""
         self.lr = max(self.lr * self.lr_decay, self.lr_min)
 
     def get_lr(self) -> float:
@@ -128,7 +119,6 @@ class SGD:
                 f"weight_decay={self.weight_decay}, lr_decay={self.lr_decay})")
 
 
-# ── quick sanity check ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     model = MLP(input_dim=16, hidden1=8, hidden2=4, num_classes=3)
     opt   = SGD(model, lr=0.01, momentum=0.9, weight_decay=1e-4, lr_decay=0.9)
